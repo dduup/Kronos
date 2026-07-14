@@ -64,7 +64,16 @@ class CustomKlineDataset(Dataset):
         df['weekday'] = df['timestamps'].dt.weekday
         df['day'] = df['timestamps'].dt.day
         df['month'] = df['timestamps'].dt.month
-        
+
+        # Column aliasing for forex/other datasets that lack 'volume'/'amount'.
+        # feature_list requires both columns; alias tick_volume -> volume and
+        # default amount to 0.0 when absent. Backward compatible: existing
+        # columns are left untouched.
+        if 'volume' not in df.columns and 'tick_volume' in df.columns:
+            df['volume'] = df['tick_volume']
+        if 'amount' not in df.columns:
+            df['amount'] = 0.0
+
         self.data = df[self.feature_list + self.time_feature_list].copy()
         
         if self.data.isnull().any().any():
