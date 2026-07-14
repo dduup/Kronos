@@ -464,9 +464,10 @@ def auto_regressive_inference(tokenizer, model, x, x_stamp, y_stamp, max_context
         z = tokenizer.decode(input_tokens, half=True)
         z = z.reshape(-1, sample_count, z.size(1), z.size(2))
         preds = z.cpu().numpy()
-        preds = np.mean(preds, axis=1)
+        preds_mean = np.mean(preds, axis=1)
+        preds_std = np.std(preds, axis=1)
 
-        return preds
+        return preds_mean, preds_std
 
 
 def calc_time_stamps(x_timestamp):
@@ -504,17 +505,21 @@ class KronosPredictor:
 
         self.tokenizer = self.tokenizer.to(self.device)
         self.model = self.model.to(self.device)
+        self.model.eval()
 
-    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose):
+    def generate(self, x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose, return_std=False):
 
         x_tensor = torch.from_numpy(np.array(x).astype(np.float32)).to(self.device)
         x_stamp_tensor = torch.from_numpy(np.array(x_stamp).astype(np.float32)).to(self.device)
         y_stamp_tensor = torch.from_numpy(np.array(y_stamp).astype(np.float32)).to(self.device)
 
-        preds = auto_regressive_inference(self.tokenizer, self.model, x_tensor, x_stamp_tensor, y_stamp_tensor, self.max_context, pred_len,
+        preds_mean, preds_std = auto_regressive_inference(self.tokenizer, self.model, x_tensor, x_stamp_tensor, y_stamp_tensor, self.max_context, pred_len,
                                           self.clip, T, top_k, top_p, sample_count, verbose)
-        preds = preds[:, -pred_len:, :]
-        return preds
+        preds_mean = preds_mean[:, -pred_len:, :]
+        preds_std = preds_std[:, -pred_len:, :]
+        if return_std:
+            return preds_mean, preds_std
+        return preds_mean
 
     def predict(self, df, x_timestamp, y_timestamp, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True):
 
@@ -557,6 +562,70 @@ class KronosPredictor:
 
         pred_df = pd.DataFrame(preds, columns=self.price_cols + [self.vol_col, self.amt_vol], index=y_timestamp)
         return pred_df
+
+    def predict_with_stats(self, df, x_timestamp, y_timestamp, pred_len, sample_count=10, T=1.0, top_k=0, top_p=0.9, verbose=True):
+        """Predict with distribution statistics (std and 95% confidence intervals).
+
+        Args:
+            sample_count: Number of Monte Carlo samples for distribution estimation. Default 10.
+            Other args: same as predict().
+
+        Returns:
+            pred_df: DataFrame with predicted mean values.
+            stats_df: DataFrame with std and ci_95_lower/ci_95_upper for each feature.
+        """
+
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError("Input must be a pandas DataFrame.")
+
+        if not all(col in df.columns for col in self.price_cols):
+            raise ValueError(f"Price columns {self.price_cols} not found in DataFrame.")
+
+        df = df.copy()
+        if self.vol_col not in df.columns:
+            df[self.vol_col] = 0.0
+            df[self.amt_vol] = 0.0
+        if self.amt_vol not in df.columns and self.vol_col in df.columns:
+            df[self.amt_vol] = df[self.vol_col] * df[self.price_cols].mean(axis=1)
+
+        if df[self.price_cols + [self.vol_col, self.amt_vol]].isnull().values.any():
+            raise ValueError("Input DataFrame contains NaN values in price or volume columns.")
+
+        x_time_df = calc_time_stamps(x_timestamp)
+        y_time_df = calc_time_stamps(y_timestamp)
+
+        x = df[self.price_cols + [self.vol_col, self.amt_vol]].values.astype(np.float32)
+        x_stamp = x_time_df.values.astype(np.float32)
+        y_stamp = y_time_df.values.astype(np.float32)
+
+        x_mean, x_std = np.mean(x, axis=0), np.std(x, axis=0)
+
+        x = (x - x_mean) / (x_std + 1e-5)
+        x = np.clip(x, -self.clip, self.clip)
+
+        x = x[np.newaxis, :]
+        x_stamp = x_stamp[np.newaxis, :]
+        y_stamp = y_stamp[np.newaxis, :]
+
+        preds_mean, preds_std = self.generate(x, x_stamp, y_stamp, pred_len, T, top_k, top_p, sample_count, verbose, return_std=True)
+
+        preds_mean = preds_mean.squeeze(0)
+        preds_std = preds_std.squeeze(0)
+
+        preds_mean = preds_mean * (x_std + 1e-5) + x_mean
+        preds_std = preds_std * (x_std + 1e-5)
+
+        feature_cols = self.price_cols + [self.vol_col, self.amt_vol]
+        pred_df = pd.DataFrame(preds_mean, columns=feature_cols, index=y_timestamp)
+
+        stats_data = {}
+        for i, col in enumerate(feature_cols):
+            stats_data[f"{col}_std"] = preds_std[:, i]
+            stats_data[f"{col}_ci_lower"] = preds_mean[:, i] - 1.96 * preds_std[:, i]
+            stats_data[f"{col}_ci_upper"] = preds_mean[:, i] + 1.96 * preds_std[:, i]
+        stats_df = pd.DataFrame(stats_data, index=y_timestamp)
+
+        return pred_df, stats_df
 
 
     def predict_batch(self, df_list, x_timestamp_list, y_timestamp_list, pred_len, T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=True):
