@@ -177,13 +177,14 @@ Test 集不是逐根评估（太慢），而是每隔 100 根 H1 取一个评估
 
 | 步骤 | 内容 | 依赖 |
 |------|------|------|
-| 1 | 数据准备（用户协调其他 agent，按数据需求规格提供 CSV） | 无 |
-| 2 | 修改 `CustomKlineDataset` 数据切分为按时间戳 | 数据到位 |
+| 1 | 数据准备（已完成，XAUUSD_H1.csv 已就位） | 无 |
+| 2 | 修改 `CustomKlineDataset` 数据切分为按时间戳 | 数据到位 ✅ |
 | 3 | 编写 `config_forex_h1.yaml` | 步骤 2 |
-| 4 | Finetune（先 Kronos-small） | 步骤 3 |
-| 5 | 编写 `evaluate_error.py` | 可与步骤 4 并行 |
-| 6 | 运行评估，输出结果 | 步骤 4 + 5 |
-| 7 | Code review（见下方） | 步骤 2 + 5 完成后 |
+| 4 | 编写 `evaluate_error.py` | 可与步骤 3 并行 |
+| 5 | **Code review**（requesting + receiving） | 步骤 2 + 3 + 4 完成后 |
+| 6 | 根据 review 反馈修复 | 步骤 5 |
+| 7 | Finetune（先 Kronos-small） | 步骤 6 通过后 |
+| 8 | 运行评估，输出结果 | 步骤 7 |
 
 ### 决策点
 
@@ -209,10 +210,10 @@ Test 集不是逐根评估（太慢），而是每隔 100 根 H1 取一个评估
 
 ## Code Review 要求
 
-在实施完成、提交代码前，执行 code review 流程：
+**在 finetune 之前**（所有代码改动完成后、启动训练前）执行 code review，确保训练流程和评估逻辑正确，避免浪费时间在错误的训练上：
 
 1. **requesting-code-review**：派发 reviewer subagent，审查以下内容：
-   - `CustomKlineDataset` 按时间戳切分的正确性（边界处理、时区）
+   - `CustomKlineDataset` 按时间戳切分的正确性（边界处理、切分日期、无数据泄漏）
    - `config_forex_h1.yaml` 超参数与设计一致
    - `evaluate_error.py` 的指标计算逻辑（MAE、方向准确率、CI 覆盖率）
    - 整体代码质量与错误处理
@@ -222,4 +223,4 @@ Test 集不是逐根评估（太慢），而是每隔 100 根 H1 取一个评估
    - Minor：记录，视情况修
    - 不合理的反馈：技术理由驳回
 
-Review 通过后提交代码。
+Review 通过并修复后，再启动 finetune。
