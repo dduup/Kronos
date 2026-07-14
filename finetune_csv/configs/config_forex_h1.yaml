@@ -1,0 +1,58 @@
+# XAUUSD H1 finetune config for MVP
+# 单品种试点，Kronos-small 验证 OHLC 生成效果
+
+data:
+  data_path: "/Users/wenwen/projects/Kronos/finetune_csv/data/XAUUSD_H1.csv"
+  lookback_window: 512
+  predict_window: 24
+  max_context: 512
+  clip: 5.0
+  # 按时间戳切分（优先于 ratio）
+  split_dates:
+    train_start: "2019-01-01"
+    train_end: "2024-01-01"
+    val_end: "2025-01-01"
+
+training:
+  tokenizer_epochs: 20
+  basemodel_epochs: 20
+  batch_size: 32
+  log_interval: 50
+  num_workers: 4
+  seed: 42
+  
+  tokenizer_learning_rate: 0.0002
+  predictor_learning_rate: 0.00004
+  
+  adam_beta1: 0.9
+  adam_beta2: 0.95
+  adam_weight_decay: 0.1
+  
+  accumulation_steps: 1
+
+model_paths:
+  pretrained_tokenizer: "NeoQuasar/Kronos-Tokenizer-base"
+  pretrained_predictor: "NeoQuasar/Kronos-small"
+  
+  exp_name: "XAUUSD_H1"
+  base_path: "/Users/wenwen/projects/Kronos/finetune_csv/finetuned"
+  
+  base_save_path: ""
+  finetuned_tokenizer: ""
+  
+  tokenizer_save_name: "tokenizer"
+  basemodel_save_name: "basemodel"
+
+experiment:
+  name: "kronos_xauusd_h1_mvp"
+  description: "MVP: Kronos-small finetune on XAUUSD H1 for OHLC generation"
+  use_comet: false
+  
+  train_tokenizer: true
+  train_basemodel: true
+  
+  skip_existing: false
+
+device:
+  use_cuda: false
+  device_id: 0
