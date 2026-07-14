@@ -560,7 +560,8 @@ class KronosPredictor:
         preds = preds.squeeze(0)
         preds = preds * (x_std + 1e-5) + x_mean
 
-        pred_df = pd.DataFrame(preds, columns=self.price_cols + [self.vol_col, self.amt_vol], index=y_timestamp)
+        pred_timestamps = y_timestamp.iloc[:pred_len] if hasattr(y_timestamp, 'iloc') else y_timestamp[:pred_len]
+        pred_df = pd.DataFrame(preds, columns=self.price_cols + [self.vol_col, self.amt_vol], index=pred_timestamps)
         return pred_df
 
     def predict_with_stats(self, df, x_timestamp, y_timestamp, pred_len, sample_count=10, T=1.0, top_k=0, top_p=0.9, verbose=True):
@@ -616,14 +617,15 @@ class KronosPredictor:
         preds_std = preds_std * (x_std + 1e-5)
 
         feature_cols = self.price_cols + [self.vol_col, self.amt_vol]
-        pred_df = pd.DataFrame(preds_mean, columns=feature_cols, index=y_timestamp)
+        pred_timestamps = y_timestamp.iloc[:pred_len] if hasattr(y_timestamp, 'iloc') else y_timestamp[:pred_len]
+        pred_df = pd.DataFrame(preds_mean, columns=feature_cols, index=pred_timestamps)
 
         stats_data = {}
         for i, col in enumerate(feature_cols):
             stats_data[f"{col}_std"] = preds_std[:, i]
             stats_data[f"{col}_ci_lower"] = preds_mean[:, i] - 1.96 * preds_std[:, i]
             stats_data[f"{col}_ci_upper"] = preds_mean[:, i] + 1.96 * preds_std[:, i]
-        stats_df = pd.DataFrame(stats_data, index=y_timestamp)
+        stats_df = pd.DataFrame(stats_data, index=pred_timestamps)
 
         return pred_df, stats_df
 
