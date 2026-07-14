@@ -90,10 +90,13 @@ def setup_logging(exp_name: str, log_dir: str, rank: int = 0) -> logging.Logger:
     return logger
 
 
-def create_dataloaders(config):
+def create_dataloaders(config, split_dates=None):
+    if split_dates is None:
+        split_dates = getattr(config, 'split_dates', None)
+
     if not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0:
         print("Creating tokenizer training data loaders...")
-    
+
     train_dataset = CustomKlineDataset(
         data_path=config.data_path,
         data_type="train",
@@ -103,9 +106,10 @@ def create_dataloaders(config):
         seed=config.seed,
         train_ratio=config.train_ratio,
         val_ratio=config.val_ratio,
-        test_ratio=config.test_ratio
+        test_ratio=config.test_ratio,
+        split_dates=split_dates
     )
-    
+
     val_dataset = CustomKlineDataset(
         data_path=config.data_path,
         data_type="val",
@@ -115,7 +119,8 @@ def create_dataloaders(config):
         seed=config.seed + 1,
         train_ratio=config.train_ratio,
         val_ratio=config.val_ratio,
-        test_ratio=config.test_ratio
+        test_ratio=config.test_ratio,
+        split_dates=split_dates
     )
     
     use_ddp = dist.is_available() and dist.is_initialized()

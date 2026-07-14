@@ -127,6 +127,9 @@ class CustomFinetuneConfig:
         self.train_ratio = data_config.get('train_ratio', 0.9)
         self.val_ratio = data_config.get('val_ratio', 0.1)
         self.test_ratio = data_config.get('test_ratio', 0.0)
+
+        # 按时间戳切分（可选，优先于 ratio）
+        self.split_dates = data_config.get('split_dates', None)
         
         # training configuration
         training_config = self.loader.get_training_config()

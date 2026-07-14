@@ -24,8 +24,9 @@ from config_loader import CustomFinetuneConfig
 
 class CustomKlineDataset(Dataset):
     
-    def __init__(self, data_path, data_type='train', lookback_window=90, predict_window=10, 
-                 clip=5.0, seed=100, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15):
+    def __init__(self, data_path, data_type='train', lookback_window=90, predict_window=10,
+                 clip=5.0, seed=100, train_ratio=0.7, val_ratio=0.15, test_ratio=0.15,
+                 split_dates=None):
         self.data_path = data_path
         self.data_type = data_type
         self.lookback_window = lookback_window
@@ -36,17 +37,18 @@ class CustomKlineDataset(Dataset):
         self.train_ratio = train_ratio
         self.val_ratio = val_ratio
         self.test_ratio = test_ratio
-        
+        self.split_dates = split_dates  # {'train_start': str, 'train_end': str, 'val_end': str}
+
         self.feature_list = ['open', 'high', 'low', 'close', 'volume', 'amount']
         self.time_feature_list = ['minute', 'hour', 'weekday', 'day', 'month']
-        
+
         self.py_rng = random.Random(seed)
-        
+
         self._load_and_preprocess_data()
         self._split_data_by_time()
-        
+
         self.n_samples = len(self.data) - self.window + 1
-            
+
         print(f"[{data_type.upper()}] Data length: {len(self.data)}, Available samples: {self.n_samples}")
     
     def _load_and_preprocess_data(self):
@@ -73,11 +75,16 @@ class CustomKlineDataset(Dataset):
         print(f"Original data total length: {len(df)} records")
     
     def _split_data_by_time(self):
+        if self.split_dates is not None:
+            self._split_by_dates()
+        else:
+            self._split_by_ratio()
+
+    def _split_by_ratio(self):
         total_length = len(self.data)
-        
         train_end = int(total_length * self.train_ratio)
         val_end = int(total_length * (self.train_ratio + self.val_ratio))
-        
+
         if self.data_type == 'train':
             self.data = self.data.iloc[:train_end].copy()
             self.timestamps = self.timestamps.iloc[:train_end].copy()
@@ -93,7 +100,29 @@ class CustomKlineDataset(Dataset):
             self.timestamps = self.timestamps.iloc[val_end:].copy()
             print(f"[{self.data_type.upper()}] Test set: after time point {val_end+1}")
             print(f"[{self.data_type.upper()}] Test set time range: {self.timestamps.min()} to {self.timestamps.max()}")
-        
+
+        print(f"[{self.data_type.upper()}] Data length after split: {len(self.data)} records")
+
+    def _split_by_dates(self):
+        train_start = pd.Timestamp(self.split_dates.get('train_start', self.timestamps.min()))
+        train_end = pd.Timestamp(self.split_dates['train_end'])
+        val_end = pd.Timestamp(self.split_dates['val_end'])
+
+        if self.data_type == 'train':
+            sel = (self.timestamps >= train_start) & (self.timestamps < train_end)
+        elif self.data_type == 'val':
+            sel = (self.timestamps >= train_end) & (self.timestamps < val_end)
+        elif self.data_type == 'test':
+            sel = self.timestamps >= val_end
+        else:
+            raise ValueError(f"Unknown data_type: {self.data_type}")
+
+        self.data = self.data[sel].copy()
+        self.timestamps = self.timestamps[sel].copy()
+        self.data = self.data.reset_index(drop=True)
+        self.timestamps = self.timestamps.reset_index(drop=True)
+
+        print(f"[{self.data_type.upper()}] Time range: {self.timestamps.min()} to {self.timestamps.max()}")
         print(f"[{self.data_type.upper()}] Data length after split: {len(self.data)} records")
     
     def set_epoch_seed(self, epoch):
@@ -178,10 +207,13 @@ def setup_logging(exp_name: str, log_dir: str, rank: int = 0) -> logging.Logger:
     return logger
 
 
-def create_dataloaders(config):
+def create_dataloaders(config, split_dates=None):
+    if split_dates is None:
+        split_dates = getattr(config, 'split_dates', None)
+
     if not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0:
         print("Creating data loaders...")
-    
+
     train_dataset = CustomKlineDataset(
         data_path=config.data_path,
         data_type='train',
@@ -191,9 +223,10 @@ def create_dataloaders(config):
         seed=config.seed,
         train_ratio=config.train_ratio,
         val_ratio=config.val_ratio,
-        test_ratio=config.test_ratio
+        test_ratio=config.test_ratio,
+        split_dates=split_dates
     )
-    
+
     val_dataset = CustomKlineDataset(
         data_path=config.data_path,
         data_type='val',
@@ -203,7 +236,8 @@ def create_dataloaders(config):
         seed=config.seed + 1,
         train_ratio=config.train_ratio,
         val_ratio=config.val_ratio,
-        test_ratio=config.test_ratio
+        test_ratio=config.test_ratio,
+        split_dates=split_dates
     )
     
     use_ddp = dist.is_available() and dist.is_initialized()
