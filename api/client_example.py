@@ -9,7 +9,7 @@ import json
 import os
 import requests
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:9188"
 PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 
 
@@ -88,15 +88,15 @@ def curl_examples():
     print("=== curl examples ===")
     print()
     print("# Health check:")
-    print("curl http://localhost:8000/health")
+    print("curl http://localhost:9188/health")
     print()
     print("# Predict with file path:")
-    print("""curl -X POST http://localhost:8000/predict \\
+    print("""curl -X POST http://localhost:9188/predict \\
   -H "Content-Type: application/json" \\
   -d '{"file_path": "./tests/data/regression_input.csv", "pred_len": 120, "sample_count": 10}'""")
     print()
     print("# Predict with JSON data:")
-    print("""curl -X POST http://localhost:8000/predict \\
+    print("""curl -X POST http://localhost:9188/predict \\
   -H "Content-Type: application/json" \\
   -d '{
     "data": {
