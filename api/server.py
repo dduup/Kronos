@@ -164,7 +164,7 @@ def predict(req: PredictRequest):
             sample_count=req.sample_count,
             T=req.temperature,
             top_p=req.top_p,
-            verbose=True,
+            verbose=False,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {e}")
@@ -232,8 +232,8 @@ def _parse_input(req: PredictRequest):
                 "high": d.high,
                 "low": d.low,
                 "close": d.close,
-                "volume": d.volume if d.volume else [0.0] * n,
-                "amount": d.amount if d.amount else [0.0] * n,
+                "volume": d.volume if d.volume is not None else [0.0] * n,
+                "amount": d.amount if d.amount is not None else [0.0] * n,
             }
         )
         timestamps = df["timestamps"].tolist()
@@ -242,17 +242,25 @@ def _parse_input(req: PredictRequest):
 
     # --- CSV file path ---
     file_path = req.file_path
-    if not os.path.isfile(file_path):
+    PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    allowed_root = os.path.realpath(PROJECT_ROOT)
+    real_path = os.path.realpath(file_path)
+    if not real_path.startswith(allowed_root + os.sep) and real_path != allowed_root:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied: file_path must be within the project directory",
+        )
+    if not os.path.isfile(real_path):
         raise HTTPException(status_code=400, detail=f"File not found: {file_path}")
 
     try:
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(real_path)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read CSV: {e}")
 
     # Detect timestamp column
     ts_col = None
-    for candidate in ("timestamps", "timestamp", "date", "datetime", "time", "datetime64"):
+    for candidate in ("timestamps", "timestamp", "date", "datetime", "time"):
         if candidate in df.columns:
             ts_col = candidate
             break
