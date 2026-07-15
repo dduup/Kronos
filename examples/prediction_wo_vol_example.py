@@ -4,6 +4,10 @@ import sys
 sys.path.append("../")
 from model import Kronos, KronosTokenizer, KronosPredictor
 
+INPUT_FILE="/Users/wenwen/projects/Kronos/examples/data/BTCUSD_H1_sample.csv"
+LOOKBACK=296
+PRED_LEN=8
+
 
 def plot_prediction(kline_df, pred_df):
     pred_df.index = kline_df.index[-pred_df.shape[0]:]
@@ -31,14 +35,14 @@ tokenizer = KronosTokenizer.from_pretrained("NeoQuasar/Kronos-Tokenizer-base")
 model = Kronos.from_pretrained("NeoQuasar/Kronos-small")
 
 # 2. Instantiate Predictor
-predictor = KronosPredictor(model, tokenizer, device="cuda:0", max_context=512)
+predictor = KronosPredictor(model, tokenizer, device="mps", max_context=512)
 
 # 3. Prepare Data
-df = pd.read_csv("./data/XSHG_5min_600977.csv")
+df = pd.read_csv(INPUT_FILE)
 df['timestamps'] = pd.to_datetime(df['timestamps'])
 
-lookback = 400
-pred_len = 120
+lookback = LOOKBACK 
+pred_len = PRED_LEN
 
 x_df = df.loc[:lookback-1, ['open', 'high', 'low', 'close']]
 x_timestamp = df.loc[:lookback-1, 'timestamps']
@@ -52,7 +56,7 @@ pred_df = predictor.predict(
     pred_len=pred_len,
     T=1.0,
     top_p=0.9,
-    sample_count=1,
+    sample_count=10,
     verbose=True
 )
 

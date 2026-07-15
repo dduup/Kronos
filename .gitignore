@@ -54,10 +54,21 @@ Desktop.ini
 *.pt
 *.ckpt
 *.bin
+*.safetensors
 
 # Logs
 *.log
 logs/
+
+# Local agent state
+.zcode/
+
+# Generated training artifacts
+finetune_csv/finetuned/
+finetune_csv/eval_results/
+finetune_csv/eval_results_lowlr/
+finetune_csv/eval_results_val/
+finetune_csv/training_plots_highlr/
 
 # Environment
 .env
